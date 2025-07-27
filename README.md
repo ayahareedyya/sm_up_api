@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # SM Image Processing API
 
 A professional image enhancement and upscaling API using Flux Kontext and LoRA models, designed for production deployment with scalable architecture.
@@ -390,3 +391,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with ❤️ for professional image processing**
+=======
+# sm_up_api
+>>>>>>> ae014189db6d2c44bfee2a86174c3f78fcb18f19

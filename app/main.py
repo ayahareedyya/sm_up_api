@@ -144,6 +144,12 @@ app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(images.router, prefix="/api/v1")
 
+# Include test endpoints only in development
+if settings.debug or settings.environment.lower() in ["development", "dev"]:
+    from app.api.v1.endpoints import test
+    app.include_router(test.router, prefix="/api/v1")
+    logger.info("Test endpoints enabled for development environment")
+
 
 @app.get("/")
 async def root():
