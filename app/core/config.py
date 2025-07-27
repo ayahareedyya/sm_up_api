@@ -4,7 +4,8 @@ Application Configuration
 Centralized configuration management using Pydantic Settings.
 """
 
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 from typing import List, Optional, Dict, Any
 import os
 from pathlib import Path
