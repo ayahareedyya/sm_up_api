@@ -92,6 +92,17 @@ class Settings(BaseSettings):
     # External Services
     webhook_timeout: int = Field(default=30, env="WEBHOOK_TIMEOUT")
     webhook_retry_attempts: int = Field(default=3, env="WEBHOOK_RETRY_ATTEMPTS")
+
+    # Development Settings
+    reload: bool = Field(default=False, env="RELOAD")
+    access_log: bool = Field(default=True, env="ACCESS_LOG")
+
+    # Individual Credit Costs (for backward compatibility)
+    credit_costs_enhance_low: int = Field(default=1, env="CREDIT_COSTS_ENHANCE_LOW")
+    credit_costs_enhance_medium: int = Field(default=2, env="CREDIT_COSTS_ENHANCE_MEDIUM")
+    credit_costs_enhance_high: int = Field(default=3, env="CREDIT_COSTS_ENHANCE_HIGH")
+    credit_costs_upscale_2x: int = Field(default=2, env="CREDIT_COSTS_UPSCALE_2X")
+    credit_costs_upscale_4x: int = Field(default=4, env="CREDIT_COSTS_UPSCALE_4X")
     
     @validator("supported_formats")
     def parse_supported_formats(cls, v):
@@ -125,6 +136,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = False
         validate_assignment = True
+        extra = "ignore"  # Ignore extra fields from .env
 
 
 # Global settings instance
