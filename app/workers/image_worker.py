@@ -28,51 +28,130 @@ logger = logging.getLogger(__name__)
 
 class FluxImageProcessor:
     """Image processor using Flux Kontext and LoRA models."""
-    
+
     def __init__(self):
-        self.device = settings.torch_device
+        # Auto-detect device
+        self.device = self._detect_device()
         self.flux_pipe = None
         self.lora_pipe = None
         self.model_loaded = False
+        self.use_cpu_fallback = self.device == "cpu"
+
+        logger.info(f"Initialized FluxImageProcessor with device: {self.device}")
+
+    def _detect_device(self):
+        """Auto-detect the best available device."""
+        try:
+            if torch.cuda.is_available():
+                device = "cuda"
+                logger.info(f"CUDA available: {torch.cuda.get_device_name()}")
+                logger.info(f"CUDA memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+            else:
+                device = "cpu"
+                logger.warning("CUDA not available, using CPU")
+
+            # Override with settings if specified
+            if hasattr(settings, 'torch_device') and settings.torch_device:
+                if settings.torch_device == "cuda" and not torch.cuda.is_available():
+                    logger.warning("CUDA requested but not available, falling back to CPU")
+                    device = "cpu"
+                else:
+                    device = settings.torch_device
+
+            return device
+        except Exception as e:
+            logger.error(f"Error detecting device: {e}")
+            return "cpu"
         
     def load_models(self):
-        """Load Flux and LoRA models."""
+        """Load Flux and LoRA models with CPU/GPU auto-detection."""
         try:
             if self.model_loaded:
                 return
-            
-            logger.info("Loading Flux Kontext model...")
-            
+
+            logger.info(f"Loading Flux Kontext model on {self.device}...")
+
+            # Check if model path exists
+            if not os.path.exists(settings.flux_model_path):
+                raise FileNotFoundError(f"Flux model not found at: {settings.flux_model_path}")
+
             # Import diffusers components
             from diffusers import FluxPipeline, DiffusionPipeline
-            
-            # Load Flux model
-            self.flux_pipe = FluxPipeline.from_pretrained(
-                settings.flux_model_path,
-                torch_dtype=torch.float16,
-                device_map="auto"
-            )
-            self.flux_pipe.to(self.device)
-            
-            # Load LoRA model for upscaling
+
+            # Configure model loading based on device
+            if self.device == "cpu":
+                logger.info("Loading model for CPU inference...")
+                self.flux_pipe = FluxPipeline.from_pretrained(
+                    settings.flux_model_path,
+                    torch_dtype=torch.float32,  # Use float32 for CPU
+                    device_map=None,
+                    low_cpu_mem_usage=True
+                )
+                self.flux_pipe.to("cpu")
+            else:
+                logger.info("Loading model for GPU inference...")
+                # Determine appropriate dtype based on GPU memory
+                torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+                self.flux_pipe = FluxPipeline.from_pretrained(
+                    settings.flux_model_path,
+                    torch_dtype=torch_dtype,
+                    device_map="auto" if torch.cuda.is_available() else None
+                )
+                self.flux_pipe.to(self.device)
+
+            # Load LoRA model for upscaling if available
             if os.path.exists(settings.lora_model_path):
                 logger.info("Loading LoRA upscaling model...")
-                # Load LoRA weights
-                self.flux_pipe.load_lora_weights(settings.lora_model_path)
-            
-            # Optimize memory usage
-            if hasattr(self.flux_pipe, 'enable_model_cpu_offload'):
-                self.flux_pipe.enable_model_cpu_offload()
-            
-            if hasattr(self.flux_pipe, 'enable_attention_slicing'):
-                self.flux_pipe.enable_attention_slicing()
-            
+                try:
+                    self.flux_pipe.load_lora_weights(settings.lora_model_path)
+                except Exception as e:
+                    logger.warning(f"Failed to load LoRA weights: {e}")
+
+            # Apply optimizations based on device
+            self._apply_optimizations()
+
             self.model_loaded = True
-            logger.info("Models loaded successfully")
-            
+            logger.info(f"Models loaded successfully on {self.device}")
+
         except Exception as e:
             logger.error(f"Error loading models: {str(e)}")
-            raise
+            # Try CPU fallback if GPU loading failed
+            if self.device != "cpu":
+                logger.info("Attempting CPU fallback...")
+                self.device = "cpu"
+                self.use_cpu_fallback = True
+                self.load_models()
+            else:
+                raise
+
+    def _apply_optimizations(self):
+        """Apply device-specific optimizations."""
+        try:
+            if self.device == "cpu":
+                # CPU optimizations
+                logger.info("Applying CPU optimizations...")
+                if hasattr(self.flux_pipe, 'enable_attention_slicing'):
+                    self.flux_pipe.enable_attention_slicing()
+
+            else:
+                # GPU optimizations
+                logger.info("Applying GPU optimizations...")
+                if hasattr(self.flux_pipe, 'enable_model_cpu_offload'):
+                    self.flux_pipe.enable_model_cpu_offload()
+
+                if hasattr(self.flux_pipe, 'enable_attention_slicing'):
+                    self.flux_pipe.enable_attention_slicing()
+
+                if hasattr(self.flux_pipe, 'enable_xformers_memory_efficient_attention'):
+                    try:
+                        self.flux_pipe.enable_xformers_memory_efficient_attention()
+                        logger.info("Enabled xformers memory efficient attention")
+                    except Exception as e:
+                        logger.warning(f"Could not enable xformers: {e}")
+
+        except Exception as e:
+            logger.warning(f"Error applying optimizations: {e}")
     
     def enhance_image(self, image: Image.Image, parameters: Dict[str, Any]) -> Image.Image:
         """

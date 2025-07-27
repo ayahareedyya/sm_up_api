@@ -61,10 +61,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - FLUX_MODEL_PATH=/app/models/flux-dev
+      - FLUX_MODEL_PATH=/app/models/flux
       - LORA_MODEL_PATH=/app/models/lora-upscale
       - STORAGE_PATH=/app/storage
-      - TORCH_DEVICE=cuda
+      - TORCH_DEVICE=auto  # Auto-detect CPU/GPU
       - GPU_MEMORY_FRACTION=0.9
       - LOG_LEVEL=INFO
     volumes:
@@ -75,9 +75,10 @@ services:
       - postgres
       - redis
     restart: unless-stopped
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
+    # GPU support (commented out for CPU-only servers)
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
     networks:
       - sm_network
 

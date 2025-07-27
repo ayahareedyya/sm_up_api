@@ -30,13 +30,32 @@ def check_redis_connection() -> bool:
         return False
 
 
-def check_gpu_availability() -> bool:
-    """Check GPU availability."""
+def check_gpu_availability() -> dict:
+    """Check GPU availability and return detailed info."""
     try:
-        return torch.cuda.is_available()
+        gpu_available = torch.cuda.is_available()
+        gpu_info = {
+            "available": gpu_available,
+            "device_count": 0,
+            "devices": []
+        }
+
+        if gpu_available:
+            gpu_info["device_count"] = torch.cuda.device_count()
+            for i in range(torch.cuda.device_count()):
+                device_info = {
+                    "index": i,
+                    "name": torch.cuda.get_device_name(i),
+                    "memory_total": torch.cuda.get_device_properties(i).total_memory,
+                    "memory_allocated": torch.cuda.memory_allocated(i),
+                    "memory_reserved": torch.cuda.memory_reserved(i)
+                }
+                gpu_info["devices"].append(device_info)
+
+        return gpu_info
     except Exception as e:
         logger.error(f"GPU check failed: {e}")
-        return False
+        return {"available": False, "error": str(e)}
 
 
 @router.get("/", response_model=HealthCheckResponse)
@@ -54,11 +73,12 @@ async def health_check(db: Session = Depends(get_db)):
     redis_status = check_redis_connection()
     
     # Check GPU
-    gpu_status = check_gpu_availability()
-    
-    # Determine overall status
-    overall_status = "healthy" if all([db_status, redis_status, gpu_status]) else "unhealthy"
-    
+    gpu_info = check_gpu_availability()
+    gpu_status = gpu_info.get("available", False)
+
+    # Determine overall status (GPU is optional)
+    overall_status = "healthy" if all([db_status, redis_status]) else "unhealthy"
+
     return HealthCheckResponse(
         status=overall_status,
         timestamp=datetime.utcnow(),
